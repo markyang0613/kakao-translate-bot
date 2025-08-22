@@ -1,8 +1,14 @@
 // Vercel API route for KakaoTalk bot - ES Module version
 import express from 'express';
+import OpenAI from 'openai';
 
 // Create Express app
 const app = express();
+
+// Initialize OpenAI
+const openai = new OpenAI({ 
+  apiKey: process.env.OPENAI_API_KEY 
+});
 
 // Middleware
 app.use(express.json({ limit: "1mb" }));
@@ -86,33 +92,60 @@ app.post('/kakao/webhook', async (req, res) => {
     const target = forced ?? inferTarget(cleaned);
     console.log('Target language:', target, 'Text:', cleaned);
     
-    // Simple translation logic (placeholder - replace with actual OpenAI call)
-    let translated = cleaned;
-    if (target === "en") {
-      // Simple Korean to English mapping
-      const koreanToEnglish = {
-        "안녕하세요": "Hello",
-        "안녕": "Hi",
-        "감사합니다": "Thank you",
-        "고마워요": "Thanks"
-      };
-      translated = koreanToEnglish[cleaned] || `${cleaned} (translated to English)`;
-    } else if (target === "ko") {
-      // Simple English to Korean mapping
-      const englishToKorean = {
-        "hello": "안녕하세요",
-        "hi": "안녕",
-        "thank you": "감사합니다",
-        "thanks": "고마워요"
-      };
-      translated = englishToKorean[cleaned.toLowerCase()] || `${cleaned} (translated to Korean)`;
+    // Use actual OpenAI API for translation
+    let translated;
+    try {
+      const system = target === "ko"
+        ? "You are a professional translator. Translate the user's text into natural, idiomatic Korean. Return ONLY the translation. Do not explain."
+        : "You are a professional translator. Translate the user's text into fluent, idiomatic English. Return ONLY the translation. Do not explain.";
+
+      const response = await openai.chat.completions.create({
+        model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: cleaned }
+        ],
+        temperature: 0.2
+      });
+
+      translated = response.choices?.[0]?.message?.content?.trim() ?? "";
+      if (!translated) {
+        throw new Error("OpenAI returned empty translation");
+      }
+
+      // Clean up output
+      translated = translated.replace(/^```[\s\S]*?```$/g, "").replace(/^["'`]|["'`]$/g, "").trim();
+      
+    } catch (openaiError) {
+      console.error('OpenAI API error:', openaiError);
+      // Fallback to simple translation if OpenAI fails
+      if (target === "en") {
+        const koreanToEnglish = {
+          "안녕하세요": "Hello",
+          "안녕": "Hi",
+          "감사합니다": "Thank you",
+          "고마워요": "Thanks"
+        };
+        translated = koreanToEnglish[cleaned] || `${cleaned} (translated to English)`;
+      } else if (target === "ko") {
+        const englishToKorean = {
+          "hello": "안녕하세요",
+          "hi": "안녕",
+          "thank you": "감사합니다",
+          "thanks": "고마워요"
+        };
+        translated = englishToKorean[cleaned.toLowerCase()] || `${cleaned} (translated to Korean)`;
+      }
     }
 
-    console.log('Sending response:', translated);
+    // Truncate if too long
+    const trimmed = translated.length > 1000 ? translated.slice(0, 997) + "..." : translated;
+
+    console.log('Sending response:', trimmed);
     return res.json({
       version: "2.0",
       template: {
-        outputs: [{ simpleText: { text: translated } }]
+        outputs: [{ simpleText: { text: trimmed } }]
       }
     });
 
