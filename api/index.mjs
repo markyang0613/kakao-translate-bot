@@ -136,5 +136,15 @@ app.post("/kakao/webhook", async (req, res) => {
   }
 });
 
+// --- Catch-all route ---
+app.use("*", (req, res) => {
+  console.log("404 for path:", req.path);
+  res.status(404).json({ 
+    error: "Not found", 
+    path: req.path,
+    availableEndpoints: ["/", "/kakao/health", "/kakao/webhook"]
+  });
+});
+
 // Vercel serverless export
 export default app;
