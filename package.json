@@ -1,31 +1,12 @@
 {
   "name": "kakao-translate-bot",
-  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
-    "lint": "eslint .",
-    "format": "prettier -w .",
-    "test": "vitest run"
-  },
   "dependencies": {
     "express": "^4.19.2",
-    "pino": "^9.3.2",
-    "zod": "^3.23.8",
-    "openai": "^4.58.1",
-    "dotenv": "^16.4.5"
+    "openai": "^4.58.1"
   },
-  "devDependencies": {
-    "@types/express": "^4.17.21",
-    "@types/node": "^20.12.12",
-    "eslint": "^9.7.0",
-    "eslint-config-prettier": "^9.1.0",
-    "prettier": "^3.3.2",
-    "tsx": "^4.16.2",
-    "typescript": "^5.5.4",
-    "vitest": "^1.6.0"
+  "scripts": {
+    "start": "node api/index.mjs"
   }
 }
