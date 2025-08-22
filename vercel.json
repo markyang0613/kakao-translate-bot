@@ -8,6 +8,14 @@
   ],
   "routes": [
     {
+      "src": "/health",
+      "dest": "/api/index.mjs"
+    },
+    {
+      "src": "/kakao/webhook",
+      "dest": "/api/index.mjs"
+    },
+    {
       "src": "/(.*)",
       "dest": "/api/index.mjs"
     }

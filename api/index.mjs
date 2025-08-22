@@ -5,6 +5,12 @@ import OpenAI from 'openai';
 // Create Express app
 const app = express();
 
+// Validate OpenAI API key
+if (!process.env.OPENAI_API_KEY) {
+  console.error("Missing OPENAI_API_KEY environment variable");
+  throw new Error("Missing OPENAI_API_KEY environment variable");
+}
+
 // Initialize OpenAI
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY 
@@ -99,6 +105,8 @@ app.post('/kakao/webhook', async (req, res) => {
         ? "You are a professional translator. Translate the user's text into natural, idiomatic Korean. Return ONLY the translation. Do not explain."
         : "You are a professional translator. Translate the user's text into fluent, idiomatic English. Return ONLY the translation. Do not explain.";
 
+      console.log('Calling OpenAI API with:', { model: process.env.OPENAI_MODEL || "gpt-4o-mini", target, text: cleaned });
+
       const response = await openai.chat.completions.create({
         model: process.env.OPENAI_MODEL || "gpt-4o-mini",
         messages: [
@@ -115,16 +123,25 @@ app.post('/kakao/webhook', async (req, res) => {
 
       // Clean up output
       translated = translated.replace(/^```[\s\S]*?```$/g, "").replace(/^["'`]|["'`]$/g, "").trim();
+      console.log('OpenAI translation successful:', translated);
       
     } catch (openaiError) {
-      console.error('OpenAI API error:', openaiError);
+      console.error('OpenAI API error details:', {
+        message: openaiError.message,
+        status: openaiError.status,
+        code: openaiError.code,
+        type: openaiError.type
+      });
+      
       // Fallback to simple translation if OpenAI fails
       if (target === "en") {
         const koreanToEnglish = {
           "안녕하세요": "Hello",
           "안녕": "Hi",
           "감사합니다": "Thank you",
-          "고마워요": "Thanks"
+          "고마워요": "Thanks",
+          "좋아요": "Good",
+          "나쁘지 않아요": "Not bad"
         };
         translated = koreanToEnglish[cleaned] || `${cleaned} (translated to English)`;
       } else if (target === "ko") {
@@ -132,10 +149,13 @@ app.post('/kakao/webhook', async (req, res) => {
           "hello": "안녕하세요",
           "hi": "안녕",
           "thank you": "감사합니다",
-          "thanks": "고마워요"
+          "thanks": "고마워요",
+          "good": "좋아요",
+          "not bad": "나쁘지 않아요"
         };
         translated = englishToKorean[cleaned.toLowerCase()] || `${cleaned} (translated to Korean)`;
       }
+      console.log('Using fallback translation:', translated);
     }
 
     // Truncate if too long
