@@ -77,6 +77,21 @@ async function translateText(text, target, model = process.env.OPENAI_MODEL || "
   return out;
 }
 
+// --- Root endpoint ---
+app.get("/", (_req, res) => {
+  res.json({
+    message: "KakaoTalk Translate Bot is running!",
+    timestamp: new Date().toISOString(),
+    env: process.env.NODE_ENV || "development",
+    hasVerifyToken: !!process.env.VERIFY_TOKEN,
+    hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+    endpoints: {
+      health: "/kakao/health",
+      webhook: "/kakao/webhook"
+    }
+  });
+});
+
 // --- Health ---
 app.get("/kakao/health", (_req, res) => res.status(200).send("ok"));
 
