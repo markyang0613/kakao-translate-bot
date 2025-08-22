@@ -124,11 +124,17 @@ app.post("/kakao/webhook", async (req, res) => {
       return res.json(simpleText("텍스트를 보내주세요. 예) /ko hello  또는  /en 안녕하세요"));
     }
 
-    // 3) Translate
+    // 3) Check OpenAI API key
+    console.log("[DBG] OpenAI API Key exists:", !!process.env.OPENAI_API_KEY);
+    console.log("[DBG] OpenAI API Key length:", process.env.OPENAI_API_KEY?.length || 0);
+
+    // 4) Translate
+    console.log("[DBG] Starting translation for:", { text: cleaned, target });
     const translated = await translateText(cleaned, target);
+    console.log("[DBG] Translation result:", translated);
     const trimmed = translated.length > 1000 ? translated.slice(0, 997) + "..." : translated;
 
-    // 4) Kakao response
+    // 5) Kakao response
     return res.json(simpleText(trimmed));
   } catch (err) {
     console.error("Handler error:", err);
