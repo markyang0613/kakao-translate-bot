@@ -1,0 +1,10 @@
+{
+  "builds": [
+    { "src": "api/index.mjs", "use": "@vercel/node" }
+  ],
+  "routes": [
+    { "src": "/kakao/health", "dest": "/api/index.mjs" },
+    { "src": "/kakao/webhook", "dest": "/api/index.mjs" },
+    { "src": "/(.*)", "dest": "/api/index.mjs" }
+  ]
+}
