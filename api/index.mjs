@@ -129,6 +129,7 @@ app.post("/kakao/webhook", async (req, res) => {
     console.log("[DBG] OpenAI API Key length:", process.env.OPENAI_API_KEY?.length || 0);
 
     // 4) Translate
+    console.log("[DBG] parsed", { raw, cleaned, forced, target });
     // before translate
     console.log("[DBG] calling OpenAI", {
       target,
