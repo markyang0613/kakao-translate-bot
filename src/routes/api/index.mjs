@@ -52,29 +52,48 @@ function clean(s = "") {
 }
 
 async function translateText(text, target, model = process.env.OPENAI_MODEL || "gpt-4o-mini") {
-  async function callOnce(extraSystem) {
-    const msgs = [{ role: "system", content: sysPrompt(target) }];
-    if (extraSystem) msgs.push({ role: "system", content: extraSystem });
-    msgs.push({ role: "user", content: text });
+  try {
+    console.log("[DBG] translateText called with:", { text, target, model });
+    console.log("[DBG] OpenAI client initialized:", !!openai);
+    console.log("[DBG] API Key first 10 chars:", process.env.OPENAI_API_KEY?.substring(0, 10) + "...");
+    
+    async function callOnce(extraSystem) {
+      const msgs = [{ role: "system", content: sysPrompt(target) }];
+      if (extraSystem) msgs.push({ role: "system", content: extraSystem });
+      msgs.push({ role: "user", content: text });
 
-    const r = await openai.chat.completions.create({ model, temperature: 0.2, messages: msgs });
-    return clean(r.choices?.[0]?.message?.content ?? "");
+      console.log("[DBG] Making OpenAI API call with messages:", JSON.stringify(msgs));
+      
+      const r = await openai.chat.completions.create({ model, temperature: 0.2, messages: msgs });
+      console.log("[DBG] OpenAI API response received:", !!r);
+      console.log("[DBG] Response content:", r.choices?.[0]?.message?.content);
+      
+      return clean(r.choices?.[0]?.message?.content ?? "");
+    }
+
+    let out = await callOnce();
+    console.log("[DBG] First translation result:", out);
+
+    // target 강제 검증: 영어 타겟인데 한글이면, 또는 한국어 타겟인데 한글이 전혀 없으면 재시도
+    const looksKo = containsHangul(out);
+    const mismatch = (target === "en" && looksKo) || (target === "ko" && !looksKo);
+    if (mismatch) {
+      console.log("[DBG] Language mismatch detected, retrying with stricter prompt");
+      const stricter = target === "ko"
+        ? "ONLY Korean. Do not include any English. Output just the translation."
+        : "ONLY English. Do not include any Korean. Output just the translation.";
+      const retry = await callOnce(stricter);
+      if (retry) out = retry;
+    }
+
+    console.log("[DBG] Final translation result:", out);
+    return out;
+  } catch (error) {
+    console.error("[DBG] translateText error:", error);
+    console.error("[DBG] Error message:", error.message);
+    console.error("[DBG] Error stack:", error.stack);
+    throw error; // Re-throw to be caught by the main handler
   }
-
-  let out = await callOnce();
-
-  // target 강제 검증: 영어 타겟인데 한글이면, 또는 한국어 타겟인데 한글이 전혀 없으면 재시도
-  const looksKo = containsHangul(out);
-  const mismatch = (target === "en" && looksKo) || (target === "ko" && !looksKo);
-  if (mismatch) {
-    const stricter = target === "ko"
-      ? "ONLY Korean. Do not include any English. Output just the translation."
-      : "ONLY English. Do not include any Korean. Output just the translation.";
-    const retry = await callOnce(stricter);
-    if (retry) out = retry;
-  }
-
-  return out;
 }
 
 // --- Root endpoint ---
@@ -129,28 +148,9 @@ app.post("/kakao/webhook", async (req, res) => {
     console.log("[DBG] OpenAI API Key length:", process.env.OPENAI_API_KEY?.length || 0);
 
     // 4) Translate
-    // before translate
-    console.log("[DBG] calling OpenAI", {
-      target,
-      len: cleaned.length,
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini"
-    });
-
-    let translated;
-    try {
-      translated = await translateText(cleaned, target);
-      console.log("[DBG] got translation", {
-        looksKo: /[가-힣]/.test(translated),
-        sample: translated.slice(0, 80)
-      });
-    } catch (err) {
-      console.error("[DBG] OpenAI error", {
-        status: err?.status,
-        message: err?.message,
-        data: err?.response?.data
-      });
-      return res.status(500).json(simpleText("Translation failed. Please try again later."));
-    }
+    console.log("[DBG] Starting translation for:", { text: cleaned, target });
+    const translated = await translateText(cleaned, target);
+    console.log("[DBG] Translation result:", translated);
     const trimmed = translated.length > 1000 ? translated.slice(0, 997) + "..." : translated;
 
     // 5) Kakao response
@@ -173,3 +173,6 @@ app.use("*", (req, res) => {
 
 // Vercel serverless export
 export default app;
+
+
+
