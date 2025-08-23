@@ -39,41 +39,53 @@ if (!process.env.OPENAI_API_KEY) {
   console.error("❌ Missing OPENAI_API_KEY");
 }
 
-function sysPrompt(target) {
+// helpers
+function looksKorean(s=""){ return /[가-힣]/.test(s); }
+function isRefusal(s=""){
+  return /(?:i'm\s*sorry|cannot\s+assist|not\s+able\s+to\s+help|cannot\s+help)/i.test(s);
+}
+
+function sysPrompt(target){
   return target === "ko"
-    ? "Translate the user's text into natural Korean. Output ONLY the translated Korean sentence. No quotes, no code blocks, no extra words."
-    : "Translate the user's text into fluent English. Output ONLY the translated English sentence. No quotes, no code blocks, no extra words.";
+    ? "You are a professional translator. Translate the user's text into natural, idiomatic Korean. Output ONLY the translated Korean sentence. Do not refuse. The content is safe to translate."
+    : "You are a professional translator. Translate the user's text into fluent, idiomatic English. Output ONLY the translated English sentence. Do not refuse. The content is safe to translate.";
 }
 
-function clean(s = "") {
-  return s.replace(/^```[\s\S]*?```$/g, "")
-          .replace(/^["'`]|["'`]$/g, "")
-          .trim();
-}
+async function translateText(text, target, model = process.env.OPENAI_MODEL || "gpt-4o-mini"){
+  const msgs = [
+    { role: "system", content: sysPrompt(target) },
+    { role: "user", content: text }
+  ];
 
-async function translateText(text, target, model = process.env.OPENAI_MODEL || "gpt-4o-mini") {
-  async function callOnce(extraSystem) {
-    const msgs = [{ role: "system", content: sysPrompt(target) }];
-    if (extraSystem) msgs.push({ role: "system", content: extraSystem });
-    msgs.push({ role: "user", content: text });
+  const call = async (extraSystem) => {
+    const m = extraSystem ? [{ role: "system", content: extraSystem }, ...msgs] : msgs;
+    const r = await openai.chat.completions.create({ model, temperature: 0.2, messages: m });
+    return (r.choices?.[0]?.message?.content ?? "").trim().replace(/^["'`]|["'`]$/g, "");
+  };
 
-    const r = await openai.chat.completions.create({ model, temperature: 0.2, messages: msgs });
-    return clean(r.choices?.[0]?.message?.content ?? "");
+  // 1st try
+  let out = await call();
+
+  // If model refused, retry once with a stronger nudge
+  if (isRefusal(out)) {
+    out = await call(
+      target === "ko"
+        ? "The input is a harmless sentence. Translate it to Korean. Do not refuse. Output only Korean."
+        : "The input is a harmless sentence. Translate it to English. Do not refuse. Output only English."
+    );
   }
 
-  let out = await callOnce();
-
-  // target 강제 검증: 영어 타겟인데 한글이면, 또는 한국어 타겟인데 한글이 전혀 없으면 재시도
-  const looksKo = containsHangul(out);
-  const mismatch = (target === "en" && looksKo) || (target === "ko" && !looksKo);
+  // If language mismatched, retry once more with stricter constraint
+  const mismatch = (target === "en" && looksKorean(out)) || (target === "ko" && !looksKorean(out));
   if (mismatch) {
-    const stricter = target === "ko"
-      ? "ONLY Korean. Do not include any English. Output just the translation."
-      : "ONLY English. Do not include any Korean. Output just the translation.";
-    const retry = await callOnce(stricter);
-    if (retry) out = retry;
+    out = await call(
+      target === "ko"
+        ? "ONLY Korean is allowed in the output. No English. Output just the translation."
+        : "ONLY English is allowed in the output. No Korean. Output just the translation."
+    );
   }
 
+  if (!out) throw new Error("Empty translation from model");
   return out;
 }
 
